@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { gantt } from 'dhtmlx-gantt'
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { MachineCapability, SlittingPlan } from '@/types/aps'
 
 // Must be called before the first gantt.init() across the entire app lifetime.
@@ -27,7 +27,7 @@ const STATUS_COLORS: Record<string, string> = {
   COMPLETED: '#165DFF',
 }
 
-let containerEl: HTMLDivElement | null = null
+const containerRef = ref<HTMLDivElement | null>(null)
 const eventIds: string[] = []
 
 function addEvent(id: string) { eventIds.push(id) }
@@ -61,16 +61,15 @@ function loadData() {
     group_id:            'key',
     group_label:         'label',
     default_group_label: '未分配',
-  })
+  } as any)
 }
 
 onMounted(() => {
-  if (!containerEl) return
+  if (!containerRef.value) return
 
   gantt.config.readonly      = false
   gantt.config.drag_links    = false
   gantt.config.drag_resize   = false
-  // @ts-expect-error — show_progress exists at runtime even if not in typings
   gantt.config.show_progress = false
   gantt.config.date_format   = '%Y-%m-%d'
   gantt.config.scale_unit    = 'day'
@@ -86,12 +85,12 @@ onMounted(() => {
   // Hide progress drag handle via template override
   gantt.templates.progress_text = () => ''
 
-  gantt.init(containerEl)
+  gantt.init(containerRef.value)
   loadData()
 
   // Block drag on RELEASED tasks
   addEvent(
-    gantt.attachEvent('onBeforeDrag', (id: string | number) => {
+    gantt.attachEvent('onBeforeDrag' as any, (id: string | number) => {
       const task = gantt.getTask(id)
       return (task as any).status !== 'RELEASED'
     }),
@@ -137,7 +136,7 @@ onBeforeUnmount(() => {
     </template>
     <p class="mb-2 text-xs text-[#86909C]">可拖拽 <strong>DRAFT</strong> 方块改变计划日期或所属机台；已下发计划锁定不可移动</p>
     <div
-      :ref="(el) => { containerEl = el as HTMLDivElement }"
+      ref="containerRef"
       class="w-full bg-white"
       style="height: 420px"
     />

@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useApsStore } from '@/stores/aps'
 import { usePagination } from '@/composables/usePagination'
-import { slittingOrderStatusTag } from '@/utils/statusTags'
 
 const apsStore = useApsStore()
 const showDialog = ref(false)
@@ -11,16 +10,8 @@ const currentDispatchId = ref('')
 const execForm = ref({ actualWeightKg: 1000, yieldRate: 0.95 })
 const submitting = ref(false)
 
-const pendingOrders = computed(() => apsStore.slittingOrders.filter((o) => o.status !== '已执行'))
 const executionRecords = computed(() => apsStore.productionRecords.filter((r) => r.process === '分切'))
-const { page: pendingPage, paged: pendingPaged, total: pendingTotal } = usePagination(() => pendingOrders.value)
 const { page: execPage, paged: execPaged, total: execTotal } = usePagination(() => executionRecords.value)
-
-function openExecute(dispatchId: string) {
-  currentDispatchId.value = dispatchId
-  execForm.value = { actualWeightKg: 1000, yieldRate: 0.95 }
-  showDialog.value = true
-}
 
 async function handleExecute() {
   submitting.value = true

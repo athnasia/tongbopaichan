@@ -18,15 +18,6 @@ const parentNav = computed(() => {
   return null
 })
 
-const sidebarMetrics = computed(() => {
-  const shortageKg = apsStore.demandShortages.reduce((s, i) => s + i.shortageKg, 0)
-  // return [
-  //   { label: '订单池', value: `${apsStore.rawOrders.length}` },
-  //   { label: '库存卷', value: `${apsStore.treatedFoilInventory.filter(i => i.status === 'AVAILABLE').length}` },
-  //   { label: '分切计划', value: `${apsStore.slittingPlans.length}` },
-  //   { label: '缺口', value: shortageKg > 0 ? `${shortageKg.toLocaleString()} kg` : '—', warn: shortageKg > 0 },
-  // ]
-})
 
 async function handleReset() {
   try {
