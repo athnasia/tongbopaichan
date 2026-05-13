@@ -62,6 +62,7 @@ const { page: rfPage, paged: rfPaged, total: rfTotal } = usePagination(() => raw
           <template v-else>
             <el-table :data="rfPaged" border stripe size="default">
               <el-table-column prop="rollId" label="卷号" min-width="120" />
+              <el-table-column prop="sysId" label="生产系统" min-width="100" />
               <el-table-column prop="machineId" label="生产机台" min-width="100" />
               <el-table-column label="厚度(μm)" min-width="90" align="right"><template #default="{ row }"><span style="font-family:Consolas,monospace">{{ row.thickness }}</span></template></el-table-column>
               <el-table-column label="宽度(mm)" min-width="90" align="right"><template #default="{ row }"><span style="font-family:Consolas,monospace">{{ row.width }}</span></template></el-table-column>

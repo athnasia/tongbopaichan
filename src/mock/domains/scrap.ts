@@ -8,7 +8,7 @@ const scrapRecordsSeed: ScrapRecord[] = [
   {
     scrapId: 'SC-001',
     process: '分切',
-    machineId: 'SL-01',
+    machineId: 'SL01',
     weightKg: 85,
     reason: '修边废边',
     grade: 'B',
@@ -17,7 +17,7 @@ const scrapRecordsSeed: ScrapRecord[] = [
   {
     scrapId: 'SC-002',
     process: '烘烤',
-    machineId: 'BK-L2',
+    machineId: 'L2',
     weightKg: 42,
     reason: '表面处理返工损失',
     grade: 'C',

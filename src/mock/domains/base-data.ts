@@ -9,7 +9,7 @@ export interface BaseDataSeed {
 
 const machinesSeed: MachineCapability[] = [
   {
-    machineId: 'RF-A7',
+    machineId: 'A7',
     factory: 'A厂',
     system: '生箔',
     supportedThicknesses: [6, 8, 12],
@@ -19,7 +19,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 6000,
   },
   {
-    machineId: 'RF-A8',
+    machineId: 'A8',
     factory: 'A厂',
     system: '生箔',
     supportedThicknesses: [8, 10, 12, 15],
@@ -29,7 +29,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 6200,
   },
   {
-    machineId: 'RF-A9',
+    machineId: 'A9',
     factory: 'A厂',
     system: '生箔',
     supportedThicknesses: [6, 10, 15],
@@ -39,7 +39,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 5800,
   },
   {
-    machineId: 'BK-L1',
+    machineId: 'L1',
     factory: 'A厂',
     system: '烘烤',
     supportedThicknesses: [6, 8, 10, 12],
@@ -49,7 +49,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 6000,
   },
   {
-    machineId: 'BK-L2',
+    machineId: 'L2',
     factory: 'A厂',
     system: '烘烤',
     supportedThicknesses: [6, 8, 10, 12, 15],
@@ -59,7 +59,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 6000,
   },
   {
-    machineId: 'SL-01',
+    machineId: 'SL01',
     factory: 'A厂',
     system: '分切',
     supportedThicknesses: [6, 8, 10, 12],
@@ -69,7 +69,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 4500,
   },
   {
-    machineId: 'SL-02',
+    machineId: 'SL02',
     factory: 'A厂',
     system: '分切',
     supportedThicknesses: [6, 8, 10, 12, 15],
@@ -79,7 +79,7 @@ const machinesSeed: MachineCapability[] = [
     standardRollLength: 4500,
   },
   {
-    machineId: 'SL-03',
+    machineId: 'SL03',
     factory: 'A厂',
     system: '分切',
     supportedThicknesses: [6, 8, 10],

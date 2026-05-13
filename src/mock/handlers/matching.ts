@@ -88,9 +88,9 @@ export function registerMatchingHandlers() {
       const taskId = `RF-SHORTAGE-${po.productionOrderId}`
       if (state.rawFoilPlanTasks.some((t) => t.id === taskId)) continue
       const machine = state.machines.find(
-        (m) => m.machineId.startsWith('RF-') && m.supportedThicknesses.includes(po.thickness),
+        (m) => m.system === '生箔' && m.supportedThicknesses.includes(po.thickness),
       )
-      const parent = po.manualMachinePref ?? machine?.machineId ?? 'RF-A7'
+      const parent = po.manualMachinePref ?? machine?.machineId ?? 'A7'
       toAdd.push({
         id: taskId,
         text: `${po.productionOrderId} 缺 ${shortageKg}kg (${po.thickness}μm)`,

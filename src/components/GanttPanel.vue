@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
       <el-descriptions-item label="开始日期">{{ selectedTask.start_date }}</el-descriptions-item>
       <el-descriptions-item label="工期 (天)">{{ selectedTask.duration }}</el-descriptions-item>
       <el-descriptions-item label="完成进度">{{ Math.round(selectedTask.progress * 100) }}%</el-descriptions-item>
-      <el-descriptions-item v-if="selectedTask.parent" label="所属机台">{{ selectedTask.parent }}</el-descriptions-item>
+      <el-descriptions-item v-if="selectedTask.parent" label="所属系统">{{ selectedTask.parent }}</el-descriptions-item>
     </el-descriptions>
   </el-dialog>
 </template>

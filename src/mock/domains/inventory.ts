@@ -12,12 +12,12 @@ export interface InventorySeed {
 
 // RF-004 已领料 (CONSUMED) 进入烘烤，其余可用于烘烤排产拖拽池
 const rawFoilSeed: RawFoilInventory[] = [
-  { rollId: 'RF-001', machineId: 'RF-A7', thickness: 6,  width: 1380, weightKg: 2000, status: 'AVAILABLE', createdAt: '2026-04-28' },
-  { rollId: 'RF-002', machineId: 'RF-A8', thickness: 8,  width: 1380, weightKg: 1600, status: 'AVAILABLE', createdAt: '2026-04-29' },
-  { rollId: 'RF-003', machineId: 'RF-A9', thickness: 10, width: 1450, weightKg: 3600, status: 'AVAILABLE', createdAt: '2026-04-30' },
-  { rollId: 'RF-004', machineId: 'RF-A7', thickness: 12, width: 1450, weightKg: 1500, status: 'CONSUMED',  createdAt: '2026-04-25' },
-  { rollId: 'RF-005', machineId: 'RF-A9', thickness: 15, width: 1450, weightKg: 1800, status: 'AVAILABLE', createdAt: '2026-05-01' },
-  { rollId: 'RF-006', machineId: 'RF-A8', thickness: 8,  width: 1380, weightKg: 1400, status: 'AVAILABLE', createdAt: '2026-05-03' },
+  { rollId: 'RF-001', machineId: 'A7', thickness: 6,  width: 1380, weightKg: 2000, status: 'AVAILABLE', createdAt: '2026-04-28' },
+  { rollId: 'RF-002', machineId: 'A8', thickness: 8,  width: 1380, weightKg: 1600, status: 'AVAILABLE', createdAt: '2026-04-29' },
+  { rollId: 'RF-003', machineId: 'A9', thickness: 10, width: 1450, weightKg: 3600, status: 'AVAILABLE', createdAt: '2026-04-30' },
+  { rollId: 'RF-004', machineId: 'A7', thickness: 12, width: 1450, weightKg: 1500, status: 'CONSUMED',  createdAt: '2026-04-25' },
+  { rollId: 'RF-005', machineId: 'A9', thickness: 15, width: 1450, weightKg: 1800, status: 'AVAILABLE', createdAt: '2026-05-01' },
+  { rollId: 'RF-006', machineId: 'A8', thickness: 8,  width: 1380, weightKg: 1400, status: 'AVAILABLE', createdAt: '2026-05-03' },
 ]
 
 // TR-001: SP-001 已完工消耗 1500kg，剩余 500kg；TR-007: RF-004 烘烤完成产出的熟箔

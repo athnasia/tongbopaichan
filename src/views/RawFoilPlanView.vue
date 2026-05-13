@@ -1,87 +1,63 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import RawFoilBucketBoard from '@/components/RawFoilBucketBoard.vue'
 import { useApsStore } from '@/stores/aps'
 import { usePagination } from '@/composables/usePagination'
 import { useRawFoilPlanState } from '@/composables/useRawFoilPlanState'
-import { recordStatusTag } from '@/utils/statusTags'
+import type { AggregatedRawFoilPlan } from '@/types/demo'
 
 const apsStore = useApsStore()
-const { rawFoilSlots, removeSlot } = useRawFoilPlanState()
+const { removeSlot } = useRawFoilPlanState()
 
-const releasing = ref<string | null>(null)
 const visibleDates = ref<string[]>([])
 function onDatesChanged(dates: string[]) { visibleDates.value = dates }
 
-// ── Flat row model ──
-interface TableRow {
-  _type: 'slot' | 'record'
-  id: string              // slotId (slot) or recordId (record)
-  productionOrderId: string
-  machineId: string
-  date: string
-  weightKg: number
-  thickness: number
-  width: number
-  strength: string
-  status?: string
-  yieldRate?: number
-  slotId?: string
+const generating = ref(false)
+const completing = ref<string | null>(null)
+const showCompleteDialog = ref(false)
+const activePlan = ref<AggregatedRawFoilPlan | null>(null)
+const completeForm = ref({ actualWeightKg: 0, yieldRate: 0.97 })
+
+const { page, paged, total } = usePagination(() => apsStore.aggregatedRawFoilPlans)
+
+function statusType(status: string) {
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'IN_PROGRESS') return 'warning'
+  return 'info'
 }
 
-// Draft slots from current session, filtered to visible week
-const slotRows = computed((): TableRow[] =>
-  Object.values(rawFoilSlots)
-    .filter((s) => visibleDates.value.includes(s.date))
-    .map((s) => ({
-      _type: 'slot',
-      id: s.slotId,
-      productionOrderId: s.productionOrderId,
-      machineId: s.machineId,
-      date: s.date,
-      weightKg: s.plannedWeightKg,
-      thickness: s.thickness,
-      width: s.width,
-      strength: s.strength,
-      slotId: s.slotId,
-    })),
-)
+function statusLabel(status: string) {
+  if (status === 'COMPLETED') return '已完工'
+  if (status === 'IN_PROGRESS') return '生产中'
+  return '草稿'
+}
 
-// Confirmed production records (process = '生箔')
-const rawFoilRecords = computed(() =>
-  apsStore.productionRecords.filter((r) => r.process === '生箔'),
-)
-
-const recordRows = computed((): TableRow[] =>
-  rawFoilRecords.value.map((r) => ({
-    _type: 'record',
-    id: r.recordId,
-    productionOrderId: r.sourceId ?? '—',
-    machineId: r.machineId,
-    date: r.plannedDate,
-    weightKg: r.actualWeightKg,
-    thickness: 0,
-    width: 0,
-    strength: '—',
-    status: r.status,
-    yieldRate: r.yieldRate,
-  })),
-)
-
-const tableRows = computed((): TableRow[] => [...slotRows.value, ...recordRows.value])
-const { page, paged, total } = usePagination(() => tableRows.value)
-
-async function handleRelease(slotId: string) {
-  const slot = rawFoilSlots[slotId]
-  if (!slot) return
-  releasing.value = slotId
+async function handleGenerate() {
+  generating.value = true
   try {
-    await apsStore.confirmRawFoilProduction(slot.machineId, slot.date, slot.plannedWeightKg)
-    removeSlot(slotId)
-    ElMessage.success('生产记录已创建，母卷已入生箔库')
+    await apsStore.generateWeeklyRawFoilPlans()
+    ElMessage.success('本周计划已生成')
   } finally {
-    releasing.value = null
+    generating.value = false
+  }
+}
+
+function openComplete(plan: AggregatedRawFoilPlan) {
+  activePlan.value = plan
+  completeForm.value = { actualWeightKg: plan.totalWeightKg, yieldRate: 0.97 }
+  showCompleteDialog.value = true
+}
+
+async function handleComplete() {
+  if (!activePlan.value) return
+  completing.value = activePlan.value.planId
+  try {
+    await apsStore.completeAggregatedRawFoilPlan(activePlan.value.planId, completeForm.value)
+    ElMessage.success('完工确认成功，烘烤计划已自动生成')
+    showCompleteDialog.value = false
+  } finally {
+    completing.value = null
   }
 }
 </script>
@@ -94,110 +70,86 @@ async function handleRelease(slotId: string) {
       <RawFoilBucketBoard @dates-changed="onDatesChanged" />
     </div>
 
-    <!-- ── Plan List ── -->
+    <!-- ── Aggregated Plan Table ── -->
     <div class="rounded-xl border border-[#E5E6EB] bg-white shadow-sm">
-      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3">
-        <span class="text-sm font-semibold text-[#1D2129]">生箔排产清单</span>
-        <span class="ml-2 text-xs text-[#86909C]">
-          {{ visibleDates[0] }} ~ {{ visibleDates[visibleDates.length - 1] }}
-          · {{ slotRows.length }} 条草稿排产 · {{ rawFoilRecords.length }} 条已确认
-        </span>
+      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3 flex items-center justify-between">
+        <span class="text-sm font-semibold text-[#1D2129]">生箔排产计划</span>
+        <div class="flex gap-2">
+          <el-button size="small" @click="">模型预测</el-button>
+          <el-button type="primary" size="small" :loading="generating" @click="handleGenerate">生成本周计划</el-button>
+        </div>
       </div>
 
       <div class="p-4">
-        <el-empty v-if="tableRows.length === 0" description="当前周期暂无排产记录" />
+        <el-empty v-if="apsStore.aggregatedRawFoilPlans.length === 0" description="暂无生箔排产计划，点击「生成本周计划」" />
         <template v-else>
           <el-table :data="paged" border stripe size="default">
-
-            <!-- 状态 -->
+            <el-table-column label="计划号" min-width="140">
+              <template #default="{ row }">
+                <span class="font-bold text-[#165DFF]" style="font-family:Consolas,monospace">{{ row.planId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="规格" prop="spec" min-width="160" />
+            <el-table-column label="计划量 (kg)" min-width="110" align="right">
+              <template #default="{ row }">
+                <span style="font-family:Consolas,monospace" class="font-semibold">{{ row.totalWeightKg.toLocaleString() }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="挂载订单" min-width="230">
+              <template #default="{ row }">
+                <div class="flex flex-wrap gap-1">
+                  <el-tag v-for="id in row.linkedOrderIds" :key="id" effect="light" type="info" size="small">{{ id }}</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="计划周期" min-width="200">
+              <template #default="{ row }">
+                <span class="text-[#86909C]">{{ row.weekStart }} ~ {{ row.weekEnd }}</span>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" min-width="90">
               <template #default="{ row }">
-                <el-tag v-if="row._type === 'slot'" effect="light" type="warning" size="small">草稿</el-tag>
-                <el-tag v-else effect="light" :type="recordStatusTag(row.status)" size="small">{{ row.status }}</el-tag>
+                <el-tag effect="light" :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
-
-            <!-- 标识 -->
-            <el-table-column label="单号/记录号" min-width="150">
+            <el-table-column label="操作" fixed="right" min-width="110" align="center">
               <template #default="{ row }">
-                <span class="font-bold text-[#165DFF]" style="font-family:Consolas,monospace">
-                  {{ row._type === 'slot' ? row.productionOrderId : row.id }}
-                </span>
+                <el-button
+                  v-if="row.status !== 'COMPLETED'"
+                  type="primary"
+                  link
+                  size="small"
+                  @click="openComplete(row)"
+                >确认完工</el-button>
+                <span v-else class="text-[#86909C] text-xs">已完工</span>
               </template>
             </el-table-column>
-
-            <!-- 机台 -->
-            <el-table-column label="机台" prop="machineId" min-width="90" />
-
-            <!-- 日期 -->
-            <el-table-column label="计划日期" prop="date" min-width="115" />
-
-            <!-- 规格 (slot only) -->
-            <el-table-column label="规格" min-width="140">
-              <template #default="{ row }">
-                <span v-if="row._type === 'slot'" style="font-family:Consolas,monospace">
-                  {{ row.thickness }}μm / {{ row.width }}mm / {{ row.strength }}
-                </span>
-                <span v-else class="text-[#C9CDD4]">—</span>
-              </template>
-            </el-table-column>
-
-            <!-- 计划量 / 实绩 -->
-            <el-table-column label="计划/实绩(kg)" min-width="115" align="right">
-              <template #default="{ row }">
-                <span
-                  class="font-semibold"
-                  :class="row._type === 'slot' ? 'text-[#165DFF]' : 'text-[#00B42A]'"
-                  style="font-family:Consolas,monospace"
-                >{{ row.weightKg }}</span>
-              </template>
-            </el-table-column>
-
-            <!-- 成材率 (record only) -->
-            <el-table-column label="成材率" min-width="80" align="right">
-              <template #default="{ row }">
-                <span v-if="row._type === 'record'" style="font-family:Consolas,monospace">
-                  {{ Math.round((row.yieldRate ?? 0) * 100) }}%
-                </span>
-                <span v-else class="text-[#C9CDD4]">—</span>
-              </template>
-            </el-table-column>
-
-            <!-- 操作 -->
-            <el-table-column label="操作" fixed="right" min-width="130" align="center">
-              <template #default="{ row }">
-                <!-- 草稿行：删除 + 下发 -->
-                <template v-if="row._type === 'slot'">
-                  <el-button type="danger" link size="small" @click="removeSlot(row.slotId)">删除</el-button>
-                  <el-button
-                    type="primary"
-                    link
-                    size="small"
-                    :loading="releasing === row.slotId"
-                    @click="handleRelease(row.slotId)"
-                  >确认生产</el-button>
-                </template>
-                <!-- 已确认行：跳转记录 -->
-                <template v-else>
-                  <el-button type="success" link size="small" @click="$router.push('/raw-foil/records')">生产记录</el-button>
-                </template>
-              </template>
-            </el-table-column>
-
           </el-table>
 
           <div class="mt-3 flex justify-end">
-            <el-pagination
-              v-model:current-page="page"
-              :page-size="10"
-              :total="total"
-              layout="total, prev, pager, next"
-              small
-            />
+            <el-pagination v-model:current-page="page" :page-size="10" :total="total" layout="total, prev, pager, next" small />
           </div>
         </template>
       </div>
     </div>
 
+    <el-dialog v-model="showCompleteDialog" title="确认完工" width="440px" destroy-on-close>
+      <div class="mb-4 text-sm text-[#4E5969]">
+        <span class="font-medium text-[#1D2129]">{{ activePlan?.planId }}</span>
+        · {{ activePlan?.spec }} · 计划量 {{ activePlan?.totalWeightKg }} kg
+      </div>
+      <el-form :model="completeForm" label-width="100px">
+        <el-form-item label="实际产量 (kg)">
+          <el-input-number v-model="completeForm.actualWeightKg" :min="1" :step="100" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="成材率">
+          <el-input-number v-model="completeForm.yieldRate" :min="0.5" :max="1" :step="0.01" :precision="2" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCompleteDialog = false">取消</el-button>
+        <el-button type="primary" :loading="completing !== null" @click="handleComplete">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

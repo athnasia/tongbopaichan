@@ -9,8 +9,8 @@ const productionRecordsSeed: ProductionRecord[] = [
   {
     recordId: 'RFR-001',
     process: '生箔',
-    sourceId: 'RF-A7',
-    machineId: 'RF-A7',
+    sourceId: 'A7',
+    machineId: 'A7',
     plannedDate: '2026-04-28',
     actualWeightKg: 2000,
     yieldRate: 0.97,
@@ -19,8 +19,8 @@ const productionRecordsSeed: ProductionRecord[] = [
   {
     recordId: 'RFR-002',
     process: '生箔',
-    sourceId: 'RF-A8',
-    machineId: 'RF-A8',
+    sourceId: 'A8',
+    machineId: 'A8',
     plannedDate: '2026-04-29',
     actualWeightKg: 1600,
     yieldRate: 0.96,
@@ -29,8 +29,8 @@ const productionRecordsSeed: ProductionRecord[] = [
   {
     recordId: 'RFR-003',
     process: '生箔',
-    sourceId: 'RF-A9',
-    machineId: 'RF-A9',
+    sourceId: 'A9',
+    machineId: 'A9',
     plannedDate: '2026-04-30',
     actualWeightKg: 3600,
     yieldRate: 0.95,
@@ -42,7 +42,7 @@ const productionRecordsSeed: ProductionRecord[] = [
     recordId: 'BKR-001',
     process: '烘烤',
     sourceId: 'RF-004',       // RF-004 已领料进入烘烤，状态 CONSUMED
-    machineId: 'BK-L1',
+    machineId: 'L1',
     plannedDate: '2026-05-02',
     actualWeightKg: 1450,
     yieldRate: 0.97,
@@ -52,7 +52,7 @@ const productionRecordsSeed: ProductionRecord[] = [
     recordId: 'BKR-002',
     process: '烘烤',
     sourceId: 'RF-HIST-1',    // 历史批次，用于统计报表演示
-    machineId: 'BK-L2',
+    machineId: 'L2',
     plannedDate: '2026-04-20',
     actualWeightKg: 1900,
     yieldRate: 0.95,
@@ -64,7 +64,7 @@ const productionRecordsSeed: ProductionRecord[] = [
     recordId: 'SLR-001',
     process: '分切',
     sourceId: 'SP-001',       // SP-001 已完工
-    machineId: 'SL-01',
+    machineId: 'SL01',
     plannedDate: '2026-05-02',
     actualWeightKg: 1455,
     yieldRate: 0.97,

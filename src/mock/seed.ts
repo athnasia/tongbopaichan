@@ -6,6 +6,7 @@ import { createOrderDomainSeed } from '@/mock/domains/orders'
 import { createRawFoilPlanSeed } from '@/mock/domains/raw-foil-plan'
 import { createScrapSeed } from '@/mock/domains/scrap'
 import { createSlittingSeed } from '@/mock/domains/slitting'
+import { createAggregatedPlanSeed } from '@/mock/domains/aggregated-plans'
 import type { ApsSeedState } from '@/types/demo'
 
 export function createSeedState(): ApsSeedState {
@@ -17,6 +18,7 @@ export function createSeedState(): ApsSeedState {
   const { slittingPlans, slittingPlanTasks, slittingOrders } = createSlittingSeed()
   const { productionRecords } = createExecutionSeed()
   const { scrapRecords } = createScrapSeed()
+  const { aggregatedRawFoilPlans, aggregatedBakingPlans } = createAggregatedPlanSeed()
 
   return {
     rawOrders,
@@ -34,6 +36,8 @@ export function createSeedState(): ApsSeedState {
     bakingPlanTasks,
     slittingPlanTasks,
     slittingOrders,
+    aggregatedRawFoilPlans,
+    aggregatedBakingPlans,
     productionRecords,
     scrapRecords,
   }

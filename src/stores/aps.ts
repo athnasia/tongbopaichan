@@ -5,6 +5,7 @@ import { inventoryApi } from '@/api/inventory'
 import { rawFoilApi } from '@/api/raw-foil'
 import { bakingApi } from '@/api/baking'
 import { slittingApi } from '@/api/slitting'
+import { configApi } from '@/api/config'
 import type {
   FinishedProductInventory,
   MachineCapability,
@@ -19,6 +20,7 @@ import type {
 import type {
   DashboardMetric, DemandShortageRow, GanttTask, InventoryBucket,
   ProcessNodeSummary, ProductionRecord, ScrapRecord, SlittingDispatchOrder,
+  AggregatedRawFoilPlan, AggregatedBakingPlan,
 } from '@/types/demo'
 
 interface ApsState {
@@ -35,6 +37,8 @@ interface ApsState {
   bakingPlanTasks: GanttTask[]
   slittingPlanTasks: GanttTask[]
   slittingOrders: SlittingDispatchOrder[]
+  aggregatedRawFoilPlans: AggregatedRawFoilPlan[]
+  aggregatedBakingPlans: AggregatedBakingPlan[]
   productionRecords: ProductionRecord[]
   scrapRecords: ScrapRecord[]
   loading: boolean
@@ -47,12 +51,14 @@ export const useApsStore = defineStore('aps', {
     rawFoilInventory: [], treatedFoilInventory: [], finishedProductInventory: [],
     slittingPlans: [],
     rawFoilPlanTasks: [], bakingPlanTasks: [], slittingPlanTasks: [],
-    slittingOrders: [], productionRecords: [], scrapRecords: [], loading: false,
+    slittingOrders: [],
+    aggregatedRawFoilPlans: [], aggregatedBakingPlans: [],
+    productionRecords: [], scrapRecords: [], loading: false,
   }),
 
   getters: {
     approvedOrders: (state) => state.productionOrders.filter((p) => p.reviewStatus === 'APPROVED'),
-    rawFoilMachines: (state) => state.machines.filter((m) => m.machineId.startsWith('RF-')),
+    rawFoilMachines: (state) => state.machines.filter((m) => m.system === '生箔'),
 
     demandShortages: (state): DemandShortageRow[] =>
       state.productionOrders
@@ -133,7 +139,7 @@ export const useApsStore = defineStore('aps', {
     async init() {
       this.loading = true
       try {
-        const [erpR, poR, rfInvR, trInvR, fnInvR, spR, soR, prR, scR, rfR, bkR, sptR] = await Promise.all([
+        const [erpR, poR, rfInvR, trInvR, fnInvR, spR, soR, prR, scR, rfR, bkR, sptR, machinesR, rfPlanR, bkPlanR] = await Promise.all([
           ordersApi.getErpOrders(),
           ordersApi.getProductionOrders(),
           inventoryApi.getRawFoil(),
@@ -146,6 +152,9 @@ export const useApsStore = defineStore('aps', {
           rawFoilApi.getPlans(),
           bakingApi.getPlans(),
           slittingApi.getPlanTasks(),
+          configApi.getMachines(),
+          rawFoilApi.getAggregatedPlans(),
+          bakingApi.getAggregatedBakingPlans(),
         ])
         this.rawOrders = erpR.data as RawErpOrder[]
         this.productionOrders = poR.data as ProductionOrder[]
@@ -159,6 +168,9 @@ export const useApsStore = defineStore('aps', {
         this.rawFoilPlanTasks = rfR.data as GanttTask[]
         this.bakingPlanTasks = bkR.data as GanttTask[]
         this.slittingPlanTasks = sptR.data as GanttTask[]
+        this.machines = machinesR.data as MachineCapability[]
+        this.aggregatedRawFoilPlans = rfPlanR.data as AggregatedRawFoilPlan[]
+        this.aggregatedBakingPlans = bkPlanR.data as AggregatedBakingPlan[]
       } finally {
         this.loading = false
       }
@@ -301,6 +313,31 @@ export const useApsStore = defineStore('aps', {
       await bakingApi.complete(recordId)
       const [trR, prR] = await Promise.all([inventoryApi.getTreated(), slittingApi.getRecords()])
       this.treatedFoilInventory = trR.data as TreatedFoilInventory[]
+      this.productionRecords = prR.data as ProductionRecord[]
+    },
+
+    async generateWeeklyRawFoilPlans() {
+      const res = await rawFoilApi.generateWeeklyPlans()
+      this.aggregatedRawFoilPlans = res.data as AggregatedRawFoilPlan[]
+    },
+    async completeAggregatedRawFoilPlan(planId: string, payload: { actualWeightKg: number; yieldRate: number }) {
+      await rawFoilApi.completeAggregatedPlan(planId, payload)
+      const [rfPlanR, bkPlanR, prR] = await Promise.all([
+        rawFoilApi.getAggregatedPlans(),
+        bakingApi.getAggregatedBakingPlans(),
+        slittingApi.getRecords(),
+      ])
+      this.aggregatedRawFoilPlans = rfPlanR.data as AggregatedRawFoilPlan[]
+      this.aggregatedBakingPlans = bkPlanR.data as AggregatedBakingPlan[]
+      this.productionRecords = prR.data as ProductionRecord[]
+    },
+    async completeAggregatedBakingPlan(bakingPlanId: string, payload: { actualWeightKg: number; yieldRate: number }) {
+      await bakingApi.completeAggregatedBakingPlan(bakingPlanId, payload)
+      const [bkPlanR, prR] = await Promise.all([
+        bakingApi.getAggregatedBakingPlans(),
+        slittingApi.getRecords(),
+      ])
+      this.aggregatedBakingPlans = bkPlanR.data as AggregatedBakingPlan[]
       this.productionRecords = prR.data as ProductionRecord[]
     },
   },

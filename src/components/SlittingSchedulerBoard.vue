@@ -25,7 +25,7 @@ const dates = computed<string[]>(() => {
 })
 
 const slMachines = computed(() =>
-  props.machines.filter((m) => m.machineId.startsWith('SL-')),
+  props.machines.filter((m) => m.system === '分切'),
 )
 
 const unscheduledPool = ref<SlittingPlan[]>([])

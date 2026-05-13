@@ -54,7 +54,7 @@ const { page, paged, total } = usePagination(() => filtered.value)
       <template v-else>
         <el-table :data="paged" border stripe size="default">
           <el-table-column prop="rollId" label="卷号" min-width="110" />
-          <el-table-column prop="machineId" label="生产机台" min-width="100" />
+          <el-table-column prop="machineId" label="系统" min-width="100" />
           <el-table-column label="厚度(μm)" min-width="90" align="right">
             <template #default="{ row }"><span style="font-family:Consolas,monospace">{{ row.thickness }}</span></template>
           </el-table-column>

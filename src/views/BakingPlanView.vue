@@ -1,84 +1,50 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import BakingBucketBoard from '@/components/BakingBucketBoard.vue'
 import { useApsStore } from '@/stores/aps'
 import { usePagination } from '@/composables/usePagination'
-import { useBakingState } from '@/composables/useBakingState'
+import type { AggregatedBakingPlan } from '@/types/demo'
 
 const apsStore = useApsStore()
-const { bakingSlots, removeSlot } = useBakingState()
 
-const releasing = ref<string | null>(null)
 const visibleDates = ref<string[]>([])
 function onDatesChanged(dates: string[]) { visibleDates.value = dates }
 
-// ── Flat row model ──
-interface TableRow {
-  _type: 'slot' | 'consumed'
-  rollId: string
-  bakingMachineId: string   // BK-xxx (slot) or '—' (consumed)
-  date: string
-  weightKg: number
-  thickness: number
-  width: number
-  productionMachineId: string  // RF-xxx (originating machine)
-  slotId?: string
+const completing = ref<string | null>(null)
+const showCompleteDialog = ref(false)
+const activePlan = ref<AggregatedBakingPlan | null>(null)
+const completeForm = ref({ actualWeightKg: 0, yieldRate: 0.98 })
+
+const { page, paged, total } = usePagination(() => apsStore.aggregatedBakingPlans)
+
+function statusType(status: string) {
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'IN_PROGRESS') return 'warning'
+  return 'info'
 }
 
-// Draft slots from current session, filtered to visible week
-const slotRows = computed((): TableRow[] =>
-  Object.values(bakingSlots)
-    .filter((s) => visibleDates.value.includes(s.date))
-    .map((s) => {
-      const roll = apsStore.rawFoilInventory.find((r) => r.rollId === s.rollId)
-      return {
-        _type: 'slot',
-        rollId: s.rollId,
-        bakingMachineId: s.machineId,
-        date: s.date,
-        weightKg: s.weightKg,
-        thickness: roll?.thickness ?? 0,
-        width: roll?.width ?? 0,
-        productionMachineId: roll?.machineId ?? '—',
-        slotId: s.slotId,
-      }
-    }),
-)
-
-// CONSUMED rolls (already reserved for baking)
-const consumedRows = computed((): TableRow[] =>
-  apsStore.rawFoilInventory
-    .filter((r) => r.status === 'CONSUMED')
-    .map((r) => ({
-      _type: 'consumed',
-      rollId: r.rollId,
-      bakingMachineId: '—',
-      date: r.createdAt,
-      weightKg: r.weightKg,
-      thickness: r.thickness,
-      width: r.width,
-      productionMachineId: r.machineId,
-    })),
-)
-
-const tableRows = computed((): TableRow[] => [...slotRows.value, ...consumedRows.value])
-const { page, paged, total } = usePagination(() => tableRows.value)
-
-function completedWeight(rollId: string) {
-  return apsStore.productionRecords
-    .filter((r) => r.sourceId === rollId && r.process === '烘烤')
-    .reduce((s, r) => s + r.actualWeightKg, 0)
+function statusLabel(status: string) {
+  if (status === 'COMPLETED') return '已完工'
+  if (status === 'IN_PROGRESS') return '烘烤中'
+  return '待烘烤'
 }
 
-async function handleRelease(slotId: string, rollId: string) {
-  releasing.value = slotId
+function openComplete(plan: AggregatedBakingPlan) {
+  activePlan.value = plan
+  completeForm.value = { actualWeightKg: plan.totalWeightKg, yieldRate: 0.98 }
+  showCompleteDialog.value = true
+}
+
+async function handleComplete() {
+  if (!activePlan.value) return
+  completing.value = activePlan.value.bakingPlanId
   try {
-    await apsStore.reserveForBaking([rollId])
-    removeSlot(slotId)
-    ElMessage.success('已下发烘烤领料')
+    await apsStore.completeAggregatedBakingPlan(activePlan.value.bakingPlanId, completeForm.value)
+    ElMessage.success('烘烤完工确认成功')
+    showCompleteDialog.value = false
   } finally {
-    releasing.value = null
+    completing.value = null
   }
 }
 </script>
@@ -91,108 +57,85 @@ async function handleRelease(slotId: string, rollId: string) {
       <BakingBucketBoard @dates-changed="onDatesChanged" />
     </div>
 
-    <!-- ── Plan List ── -->
+    <!-- ── Aggregated Plan Table ── -->
     <div class="rounded-xl border border-[#E5E6EB] bg-white shadow-sm">
-      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3">
-        <span class="text-sm font-semibold text-[#1D2129]">烘烤计划清单</span>
-        <span class="ml-2 text-xs text-[#86909C]">
-          {{ visibleDates[0] }} ~ {{ visibleDates[visibleDates.length - 1] }}
-          · {{ slotRows.length }} 条草稿排产 · {{ consumedRows.length }} 条已领料
-        </span>
+      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3 flex items-center justify-between">
+        <span class="text-sm font-semibold text-[#1D2129]">烘烤计划</span>
+        <div class="flex gap-2">
+          <el-button size="small" @click="">模型预测</el-button>
+        </div>
       </div>
 
       <div class="p-4">
-        <el-empty v-if="tableRows.length === 0" description="当前周期暂无排产记录" />
+        <el-empty v-if="apsStore.aggregatedBakingPlans.length === 0" description="暂无烘烤计划，完成生箔计划后自动生成" />
         <template v-else>
           <el-table :data="paged" border stripe size="default">
-
-            <!-- 状态 -->
+            <el-table-column label="烘烤计划号" min-width="145">
+              <template #default="{ row }">
+                <span class="font-bold text-[#165DFF]" style="font-family:Consolas,monospace">{{ row.bakingPlanId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源生箔计划" min-width="145">
+              <template #default="{ row }">
+                <span class="text-[#4E5969]" style="font-family:Consolas,monospace">{{ row.sourceFoilPlanId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="规格" prop="spec" min-width="160" />
+            <el-table-column label="重量 (kg)" min-width="110" align="right">
+              <template #default="{ row }">
+                <span style="font-family:Consolas,monospace" class="font-semibold">{{ row.totalWeightKg.toLocaleString() }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="挂载订单" min-width="230">
+              <template #default="{ row }">
+                <div class="flex flex-wrap gap-1">
+                  <el-tag v-for="id in row.linkedOrderIds" :key="id" effect="light" type="info" size="small">{{ id }}</el-tag>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" min-width="90">
               <template #default="{ row }">
-                <el-tag v-if="row._type === 'slot'" effect="light" type="warning" size="small">草稿</el-tag>
-                <el-tag v-else effect="light" type="success" size="small">已领料</el-tag>
+                <el-tag effect="light" :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
-
-            <!-- 生箔卷号 -->
-            <el-table-column label="生箔卷号" min-width="120">
+            <el-table-column label="操作" fixed="right" min-width="110" align="center">
               <template #default="{ row }">
-                <span class="font-bold text-[#165DFF]" style="font-family:Consolas,monospace">{{ row.rollId }}</span>
+                <el-button
+                  v-if="row.status !== 'COMPLETED'"
+                  type="primary"
+                  link
+                  size="small"
+                  @click="openComplete(row)"
+                >确认完工</el-button>
+                <span v-else class="text-[#86909C] text-xs">已完工</span>
               </template>
             </el-table-column>
-
-            <!-- 规格 -->
-            <el-table-column label="厚/宽" min-width="120">
-              <template #default="{ row }">
-                <span style="font-family:Consolas,monospace">{{ row.thickness }}μm / {{ row.width }}mm</span>
-              </template>
-            </el-table-column>
-
-            <!-- 生产机台 -->
-            <el-table-column label="生产机台" prop="productionMachineId" min-width="95" />
-
-            <!-- 烘炉 -->
-            <el-table-column label="烘炉" prop="bakingMachineId" min-width="85" />
-
-            <!-- 计划入炉日 -->
-            <el-table-column label="计划入炉日" prop="date" min-width="115" />
-
-            <!-- 重量 -->
-            <el-table-column label="重量(kg)" min-width="100" align="right">
-              <template #default="{ row }">
-                <span
-                  class="font-semibold"
-                  :class="row._type === 'slot' ? 'text-[#165DFF]' : 'text-[#4E5969]'"
-                  style="font-family:Consolas,monospace"
-                >{{ row.weightKg }}</span>
-              </template>
-            </el-table-column>
-
-            <!-- 已完成 -->
-            <el-table-column label="已完工(kg)" min-width="105" align="right">
-              <template #default="{ row }">
-                <span
-                  style="font-family:Consolas,monospace"
-                  :class="completedWeight(row.rollId) > 0 ? 'text-[#00B42A] font-semibold' : 'text-[#86909C]'"
-                >{{ completedWeight(row.rollId) }}</span>
-              </template>
-            </el-table-column>
-
-            <!-- 操作 -->
-            <el-table-column label="操作" fixed="right" min-width="130" align="center">
-              <template #default="{ row }">
-                <!-- 草稿行：删除 + 下发 -->
-                <template v-if="row._type === 'slot'">
-                  <el-button type="danger" link size="small" @click="removeSlot(row.slotId)">删除</el-button>
-                  <el-button
-                    type="primary"
-                    link
-                    size="small"
-                    :loading="releasing === row.slotId"
-                    @click="handleRelease(row.slotId, row.rollId)"
-                  >下发</el-button>
-                </template>
-                <!-- 已领料行：跳转记录 -->
-                <template v-else>
-                  <el-button type="success" link size="small" @click="$router.push('/baking/records')">完工记录</el-button>
-                </template>
-              </template>
-            </el-table-column>
-
           </el-table>
 
           <div class="mt-3 flex justify-end">
-            <el-pagination
-              v-model:current-page="page"
-              :page-size="10"
-              :total="total"
-              layout="total, prev, pager, next"
-              small
-            />
+            <el-pagination v-model:current-page="page" :page-size="10" :total="total" layout="total, prev, pager, next" small />
           </div>
         </template>
       </div>
     </div>
 
+    <el-dialog v-model="showCompleteDialog" title="确认烘烤完工" width="440px" destroy-on-close>
+      <div class="mb-4 text-sm text-[#4E5969]">
+        <span class="font-medium text-[#1D2129]">{{ activePlan?.bakingPlanId }}</span>
+        · {{ activePlan?.spec }} · 计划量 {{ activePlan?.totalWeightKg }} kg
+      </div>
+      <el-form :model="completeForm" label-width="100px">
+        <el-form-item label="实际产量 (kg)">
+          <el-input-number v-model="completeForm.actualWeightKg" :min="1" :step="100" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="成材率">
+          <el-input-number v-model="completeForm.yieldRate" :min="0.5" :max="1" :step="0.01" :precision="2" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCompleteDialog = false">取消</el-button>
+        <el-button type="primary" :loading="completing !== null" @click="handleComplete">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

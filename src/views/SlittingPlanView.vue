@@ -109,12 +109,15 @@ async function handleRelease(planId: string) {
 
     <!-- ── Plan List ── -->
     <div class="rounded-xl border border-[#E5E6EB] bg-white shadow-sm">
-      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3">
-        <span class="text-sm font-semibold text-[#1D2129]">分切计划清单</span>
-        <span class="ml-2 text-xs text-[#86909C]">
-          {{ visibleDates[0] }} ~ {{ visibleDates[visibleDates.length - 1] }}
-          · {{ slotRows.length }} 条草稿排产 · {{ planRows.length }} 条已下发
-        </span>
+      <div class="border-b border-[#E5E6EB] bg-[#F7F8FA] px-4 py-3 flex items-center justify-between">
+        <div>
+          <span class="text-sm font-semibold text-[#1D2129]">分切计划清单</span>
+          <span class="ml-2 text-xs text-[#86909C]">
+            {{ visibleDates[0] }} ~ {{ visibleDates[visibleDates.length - 1] }}
+            · {{ slotRows.length }} 条草稿排产 · {{ planRows.length }} 条已下发
+          </span>
+        </div>
+        <el-button size="small" @click="">模型预测</el-button>
       </div>
 
       <div class="p-4">
@@ -152,7 +155,7 @@ async function handleRelease(planId: string) {
             <!-- 排产日期 -->
             <el-table-column label="排产日期" prop="date" min-width="115" />
 
-            <!-- 拼刀组合 -->
+            <!-- 拼单组合 -->
             <el-table-column label="拼单组合" min-width="200">
               <template #default="{ row }">
                 <div class="flex flex-wrap gap-1">

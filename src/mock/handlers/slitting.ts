@@ -62,9 +62,9 @@ export function registerSlittingHandlers() {
 
     const slittingPlans = [...state.slittingPlans, ...newPlans]
 
-    const machineIds = [...new Set(slittingPlans.map((p) => p.machineId ?? 'SL-01'))]
+    const machineIds = [...new Set(slittingPlans.map((p) => p.machineId ?? 'SL01'))]
     const slittingPlanTasks = machineIds.flatMap((mid) => {
-      const machinePlans = slittingPlans.filter((p) => (p.machineId ?? 'SL-01') === mid)
+      const machinePlans = slittingPlans.filter((p) => (p.machineId ?? 'SL01') === mid)
       return [
         { id: mid, text: `${mid} 分切机台`, start_date: machinePlans[0].plannedDate, duration: 1, progress: 0, open: true },
         ...machinePlans.map((p) => ({
@@ -126,7 +126,7 @@ export function registerSlittingHandlers() {
     const newOrder: SlittingDispatchOrder = {
       dispatchId,
       planId: planId!,
-      machineId: plan.machineId ?? 'SL-01',
+      machineId: plan.machineId ?? 'SL01',
       plannedDate: plan.plannedDate,
       shift: '白班',
       status: '待下发',
@@ -171,7 +171,7 @@ export function registerSlittingHandlers() {
       recordId: `SLR-${Date.now()}`,
       process: '分切',
       sourceId: plan.planId,
-      machineId: plan.machineId ?? 'SL-01',
+      machineId: plan.machineId ?? 'SL01',
       plannedDate: plan.plannedDate,
       actualWeightKg,
       yieldRate,
@@ -221,7 +221,7 @@ export function registerSlittingHandlers() {
       const scrap: ScrapRecord = {
         scrapId: `SC-${Date.now()}`,
         process: '分切',
-        machineId: plan.machineId ?? 'SL-01',
+        machineId: plan.machineId ?? 'SL01',
         weightKg: Math.round(actualWeightKg * (plan.returnWidth / (motherRoll?.width ?? 1380))),
         reason: `余宽${plan.returnWidth}mm < 阈值${threshold}mm`,
         grade: 'C',

@@ -49,7 +49,7 @@ watch(dates, (v) => emit('dates-changed', v), { immediate: true })
 
 // ── Machines ──
 const slMachines = computed(() =>
-  configStore.machineList.filter((m) => m.machineId.startsWith('SL-')),
+  configStore.machineList.filter((m) => m.system === '分切'),
 )
 
 // ── Extended type for local state ──
@@ -376,7 +376,7 @@ function fmtWeekRange() {
           </draggable>
 
           <div v-if="unscheduledPool.length === 0" class="mt-8 text-center text-xs text-[#C9CDD4]">
-            所有任务已排程 ✓
+            所有任务已排程 
           </div>
         </div>
       </div>
@@ -394,7 +394,7 @@ function fmtWeekRange() {
           <thead>
             <tr>
               <th class="sticky left-0 z-20 w-[72px] border-b border-r border-[#E5E6EB] bg-[#F7F8FA] px-2 py-2 text-left text-xs font-semibold text-[#4E5969]">
-                机台
+                系统
               </th>
               <th
                 v-for="d in dates"

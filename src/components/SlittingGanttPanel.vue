@@ -47,7 +47,7 @@ function buildTasks() {
 
 function buildGroups() {
   const slMachines = props.machines
-    .filter((m) => m.machineId.startsWith('SL-'))
+    .filter((m) => m.system === '分切')
     .map((m) => ({ key: m.machineId, label: m.machineId }))
   return [...slMachines, { key: '__unassigned__', label: '未分配' }]
 }

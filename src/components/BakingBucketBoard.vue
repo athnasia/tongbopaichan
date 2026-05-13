@@ -48,7 +48,7 @@ watch(dates, (v) => emit('dates-changed', v), { immediate: true })
 
 // ── Baking machines ──
 const bkMachines = computed(() =>
-  configStore.machineList.filter((m) => m.machineId.startsWith('BK-')),
+  configStore.machineList.filter((m) => m.system === '烘烤'),
 )
 
 // ── Extended type for grid/pool ──
@@ -241,7 +241,7 @@ function fmtWeekRange() {
           <thead>
             <tr>
               <th class="sticky left-0 z-20 w-[72px] border-b border-r border-[#E5E6EB] bg-[#F7F8FA] px-2 py-2 text-left text-xs font-semibold text-[#4E5969]">
-                烘炉
+                系统
               </th>
               <th
                 v-for="d in dates"
@@ -352,9 +352,9 @@ function fmtWeekRange() {
           <el-descriptions-item label="卷号" :span="2">
             <span class="font-bold text-[#165DFF]">{{ detailRoll.rollId }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="烘炉">{{ detailMachineId }}</el-descriptions-item>
+          <el-descriptions-item label="生产系统">{{ detailMachineId }}</el-descriptions-item>
           <el-descriptions-item label="计划入炉日">{{ detailDate }}</el-descriptions-item>
-          <el-descriptions-item label="生产机台">{{ detailRoll.machineId }}</el-descriptions-item>
+          <!-- <el-descriptions-item label="生产机台">{{ detailRoll.machineId }}</el-descriptions-item> -->
           <el-descriptions-item label="入库日期">{{ detailRoll.createdAt }}</el-descriptions-item>
           <el-descriptions-item label="厚度">{{ detailRoll.thickness }} μm</el-descriptions-item>
           <el-descriptions-item label="宽度">{{ detailRoll.width }} mm</el-descriptions-item>

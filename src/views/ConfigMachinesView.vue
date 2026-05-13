@@ -14,48 +14,36 @@ const showImportDialog = ref(false)
 const importFileName = ref('')
 
 // ── Tree ─────────────────────────────────────────────────────
-type NodeType = 'root' | 'factory' | 'system' | 'machine'
+type NodeType = 'root' | 'factory' | 'machine'
 interface TreeNode {
   id: string
   label: string
   nodeType: NodeType
   factory?: string
-  system?: string
   machineId?: string
   children?: TreeNode[]
 }
 
-const selectedNode = ref<{ type: NodeType; factory?: string; system?: string; machineId?: string }>({ type: 'root' })
+const selectedNode = ref<{ type: NodeType; factory?: string; machineId?: string }>({ type: 'root' })
 
 const treeData = computed<TreeNode[]>(() => {
-  const fMap = new Map<string, Map<string, MachineCapability[]>>()
+  const fMap = new Map<string, MachineCapability[]>()
   for (const m of configStore.machineList) {
     const f = m.factory ?? '默认厂'
-    const s = m.system ?? '未分类'
-    if (!fMap.has(f)) fMap.set(f, new Map())
-    const sMap = fMap.get(f)!
-    if (!sMap.has(s)) sMap.set(s, [])
-    sMap.get(s)!.push(m)
+    if (!fMap.has(f)) fMap.set(f, [])
+    fMap.get(f)!.push(m)
   }
-  return [...fMap.entries()].map(([factory, sMap]) => ({
+  return [...fMap.entries()].map(([factory, machines]) => ({
     id: `f:${factory}`,
     label: factory,
     nodeType: 'factory' as const,
     factory,
-    children: [...sMap.entries()].map(([system, machines]) => ({
-      id: `s:${factory}:${system}`,
-      label: system,
-      nodeType: 'system' as const,
+    children: machines.map((m) => ({
+      id: `m:${m.machineId}`,
+      label: m.machineId,
+      nodeType: 'machine' as const,
       factory,
-      system,
-      children: machines.map((m) => ({
-        id: `m:${m.machineId}`,
-        label: m.machineId,
-        nodeType: 'machine' as const,
-        factory,
-        system,
-        machineId: m.machineId,
-      })),
+      machineId: m.machineId,
     })),
   }))
 })
@@ -64,24 +52,22 @@ const defaultExpandedKeys = computed(() => treeData.value.map((n) => n.id))
 
 function handleNodeClick(node: TreeNode) {
   machinePage.value = 1
-  const { nodeType, factory, system, machineId } = node
-  selectedNode.value = { type: nodeType, factory, system, machineId }
+  const { nodeType, factory, machineId } = node
+  selectedNode.value = { type: nodeType, factory, machineId }
 }
 
 const selectedLabel = computed(() => {
   const n = selectedNode.value
   if (n.type === 'root') return '全部机台'
   if (n.type === 'factory') return n.factory!
-  if (n.type === 'system') return `${n.factory} / ${n.system}`
   return n.machineId!
 })
 
 // ── Filter + Pagination ──────────────────────────────────────
 const filteredMachines = computed(() => {
-  const { type, factory, system, machineId } = selectedNode.value
+  const { type, factory, machineId } = selectedNode.value
   if (type === 'root') return configStore.machineList
   if (type === 'factory') return configStore.machineList.filter((m) => (m.factory ?? '默认厂') === factory)
-  if (type === 'system') return configStore.machineList.filter((m) => (m.factory ?? '默认厂') === factory && (m.system ?? '未分类') === system)
   return configStore.machineList.filter((m) => m.machineId === machineId)
 })
 
@@ -95,7 +81,7 @@ const allSystems = ['生箔', '烘烤', '分切']
 const defaultForm = (): MachineCapability => ({
   machineId: '',
   factory: selectedNode.value.factory ?? 'A厂',
-  system: selectedNode.value.system ?? '生箔',
+  system: '生箔',
   supportedThicknesses: [],
   capableStrengths: [],
   maxWidth: 1380,
@@ -136,7 +122,7 @@ async function handleDelete(machineId: string) {
 }
 
 async function handleSave() {
-  if (!form.machineId) { ElMessage.warning('请填写机台编号'); return }
+  if (!form.machineId) { ElMessage.warning('请填写系统编号'); return }
   submitting.value = true
   try {
     if (isEdit.value) await configStore.editMachine({ ...form })
@@ -166,7 +152,6 @@ async function handleSave() {
           <span
             :class="{
               'font-semibold text-[#1D2129]': data.nodeType === 'factory',
-              'font-medium text-[#4E5969]': data.nodeType === 'system',
               'text-[#86909C]': data.nodeType === 'machine',
             }"
             class="text-sm"
@@ -252,7 +237,7 @@ async function handleSave() {
         </el-select>
       </el-form-item>
       <el-form-item label="系统编号">
-        <el-input v-model="form.machineId" :disabled="isEdit" />
+        <el-input v-model="form.machineId" :disabled="isEdit" placeholder="如 A7、L1、SL01" />
       </el-form-item>
       <el-form-item label="标准幅宽 (mm)"><el-input-number v-model="form.maxWidth" :min="100" :max="2000" style="width:100%" /></el-form-item>
       <el-form-item label="最小幅宽 (mm)"><el-input-number v-model="form.minWidth" :min="50" :max="1000" style="width:100%" /></el-form-item>

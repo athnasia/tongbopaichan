@@ -9,6 +9,7 @@ import type {
   RawFoilInventory,
   SchedulingRuleConfig,
   SlittingPlan,
+  Strength,
   TreatedFoilInventory,
 } from './aps'
 
@@ -95,6 +96,33 @@ export interface DemandShortageRow {
   strength: string
 }
 
+export interface AggregatedRawFoilPlan {
+  planId: string
+  spec: string             // e.g. '高/6μm/600mm'
+  thickness: number
+  width: number
+  strength: Strength
+  totalWeightKg: number
+  linkedOrderIds: string[] // production order IDs attached
+  weekStart: string
+  weekEnd: string
+  status: 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED'
+  createdAt: string
+}
+
+export interface AggregatedBakingPlan {
+  bakingPlanId: string
+  sourceFoilPlanId: string
+  spec: string
+  thickness: number
+  width: number
+  strength: string
+  totalWeightKg: number
+  linkedOrderIds: string[]
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+  createdAt: string
+}
+
 export interface ApsSeedState {
   // 订单链
   rawOrders: RawErpOrder[]
@@ -120,6 +148,10 @@ export interface ApsSeedState {
   rawFoilPlanTasks: GanttTask[]
   bakingPlanTasks: GanttTask[]
   slittingPlanTasks: GanttTask[]
+
+  // 聚合生产计划
+  aggregatedRawFoilPlans: AggregatedRawFoilPlan[]
+  aggregatedBakingPlans: AggregatedBakingPlan[]
 
   // 实绩
   productionRecords: ProductionRecord[]
