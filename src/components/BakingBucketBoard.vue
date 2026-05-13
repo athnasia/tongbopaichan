@@ -4,7 +4,6 @@ import draggable from 'vuedraggable'
 import { useApsStore } from '@/stores/aps'
 import { useConfigStore } from '@/stores/useConfigStore'
 import { useBakingState } from '@/composables/useBakingState'
-import type { RawFoilInventory } from '@/types/aps'
 
 const apsStore = useApsStore()
 const configStore = useConfigStore()
@@ -51,42 +50,75 @@ const bkMachines = computed(() =>
   configStore.machineList.filter((m) => m.system === '烘烤'),
 )
 
-// ── Extended type for grid/pool ──
-interface GridRoll extends RawFoilInventory {
+// ── Aggregated spec group ──
+interface AggregatedRoll {
+  specKey: string        // '6-600'
+  thickness: number
+  width: number
+  rollIds: string[]
+  totalWeightKg: number
+  rollCount: number
   _slotId?: string
 }
 
-const unscheduledPool = ref<GridRoll[]>([])
-const gridMap = ref<Record<string, Record<string, GridRoll[]>>>({})
+const unscheduledPool = ref<AggregatedRoll[]>([])
+const gridMap = ref<Record<string, Record<string, AggregatedRoll[]>>>({})
 
 function buildState() {
   const datesArr = dates.value
   const machines = bkMachines.value
 
-  const newGrid: Record<string, Record<string, GridRoll[]>> = {}
+  const newGrid: Record<string, Record<string, AggregatedRoll[]>> = {}
   for (const m of machines) {
     newGrid[m.machineId] = {}
     for (const d of datesArr) newGrid[m.machineId][d] = []
   }
 
-  const slottedRollIds = new Set(Object.values(bakingSlots).map((s) => s.rollId))
-
-  // Grid: slot-based draft entries
+  // Rebuild grid from slot data
   for (const [slotId, slot] of Object.entries(bakingSlots)) {
-    const roll = apsStore.rawFoilInventory.find((r) => r.rollId === slot.rollId)
-    if (!roll) continue
-    if (newGrid[slot.machineId]?.[slot.date] !== undefined) {
-      newGrid[slot.machineId][slot.date].push({ ...roll, _slotId: slotId })
-    }
+    if (newGrid[slot.machineId]?.[slot.date] === undefined) continue
+    // Reconstruct spec from first roll
+    const firstRoll = apsStore.rawFoilInventory.find((r) => slot.rollIds[0] === r.rollId)
+    if (!firstRoll) continue
+    newGrid[slot.machineId][slot.date].push({
+      specKey: `${firstRoll.thickness}-${firstRoll.width}`,
+      thickness: firstRoll.thickness,
+      width: firstRoll.width,
+      rollIds: slot.rollIds,
+      totalWeightKg: slot.weightKg,
+      rollCount: slot.rollIds.length,
+      _slotId: slotId,
+    })
   }
 
-  // Pool: AVAILABLE rolls not yet slotted
-  const newPool: GridRoll[] = apsStore.rawFoilInventory
-    .filter((r) => r.status === 'AVAILABLE' && !slottedRollIds.has(r.rollId))
-    .map((r) => ({ ...r }))
+  // Pool: aggregate AVAILABLE rolls by spec, skip slotted rolls
+  const slottedRollIds = new Set(
+    Object.values(bakingSlots).flatMap((s) => s.rollIds),
+  )
+  const specMap = new Map<string, AggregatedRoll>()
+
+  for (const r of apsStore.rawFoilInventory) {
+    if (r.status !== 'AVAILABLE') continue
+    if (slottedRollIds.has(r.rollId)) continue
+    const specKey = `${r.thickness}-${r.width}`
+    if (!specMap.has(specKey)) {
+      specMap.set(specKey, {
+        specKey,
+        thickness: r.thickness,
+        width: r.width,
+        rollIds: [],
+        totalWeightKg: 0,
+        rollCount: 0,
+      })
+    }
+    const entry = specMap.get(specKey)!
+    entry.rollIds.push(r.rollId)
+    entry.totalWeightKg += r.weightKg
+    entry.rollCount++
+  }
 
   gridMap.value = newGrid
-  unscheduledPool.value = newPool
+  unscheduledPool.value = [...specMap.values()]
 }
 
 watch(
@@ -99,13 +131,13 @@ onMounted(() => configStore.init())
 
 // ── Helpers ──
 function cellTotal(machineId: string, date: string): number {
-  return (gridMap.value[machineId]?.[date] ?? []).reduce((s, r) => s + r.weightKg, 0)
+  return (gridMap.value[machineId]?.[date] ?? []).reduce((s, r) => s + r.totalWeightKg, 0)
 }
 
 // ── Drag handlers ──
 function onCellChange(evt: any, machineId: string, date: string) {
   if (!evt.added) return
-  const roll = evt.added.element as GridRoll
+  const roll = evt.added.element as AggregatedRoll
 
   // Slot card moved cell-to-cell: update location only
   if (roll._slotId) {
@@ -114,28 +146,34 @@ function onCellChange(evt: any, machineId: string, date: string) {
     return
   }
 
-  // Pool card dropped into cell: create slot directly (roll is indivisible)
-  const slotId = `${roll.rollId}_${Date.now()}`
-  bakingSlots[slotId] = { slotId, rollId: roll.rollId, machineId, date, weightKg: roll.weightKg }
+  // Pool card dropped into cell: create slot with all rolls in this spec group
+  const slotId = `${roll.specKey}_${Date.now()}`
+  bakingSlots[slotId] = {
+    slotId,
+    rollIds: roll.rollIds,
+    machineId,
+    date,
+    weightKg: roll.totalWeightKg,
+  }
 }
 
 function onPoolChange(evt: any) {
   if (!evt.added) return
-  const roll = evt.added.element as GridRoll
+  const roll = evt.added.element as AggregatedRoll
   if (roll._slotId) removeSlot(roll._slotId)
 }
 
-function returnToPool(roll: GridRoll) {
+function returnToPool(roll: AggregatedRoll) {
   if (roll._slotId) removeSlot(roll._slotId)
 }
 
 // ── Detail dialog ──
 const showDetailDialog = ref(false)
-const detailRoll = ref<GridRoll | null>(null)
+const detailRoll = ref<AggregatedRoll | null>(null)
 const detailMachineId = ref('')
 const detailDate = ref('')
 
-function openDetail(roll: GridRoll, machineId: string, date: string) {
+function openDetail(roll: AggregatedRoll, machineId: string, date: string) {
   detailRoll.value = roll
   detailMachineId.value = machineId
   detailDate.value = date
@@ -195,14 +233,14 @@ function fmtWeekRange() {
       <div class="flex w-52 shrink-0 flex-col overflow-hidden rounded-xl border border-[#E5E6EB] bg-white shadow-sm">
         <div class="shrink-0 border-b border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2.5">
           <div class="text-sm font-semibold text-[#1D2129]">待入炉生箔</div>
-          <div class="mt-0.5 text-xs text-[#86909C]">{{ unscheduledPool.length }} 卷可用</div>
+          <div class="mt-0.5 text-xs text-[#86909C]">{{ unscheduledPool.length }} 种规格可用</div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-2">
           <draggable
             v-model="unscheduledPool"
             group="baking-rolls"
-            item-key="rollId"
+            item-key="specKey"
             ghost-class="opacity-30"
             @change="onPoolChange"
           >
@@ -211,13 +249,15 @@ function fmtWeekRange() {
                 class="mb-2 cursor-grab select-none rounded-lg border border-[#E5E6EB] bg-white p-2.5 shadow-sm transition-shadow hover:border-[#A0CFFF] hover:shadow-md active:cursor-grabbing"
               >
                 <div class="flex items-start justify-between gap-1">
-                  <span class="text-[11px] font-bold text-[#165DFF]">{{ r.rollId }}</span>
-                  <span class="shrink-0 font-mono text-[10px] text-[#86909C]">{{ r.weightKg }}kg</span>
+                  <span class="font-mono text-[11px] font-bold text-[#165DFF]">
+                    {{ r.thickness }}μm / {{ r.width }}mm
+                  </span>
+                  <span class="shrink-0 font-mono text-[10px] font-semibold text-[#F53F3F]">{{ r.totalWeightKg }}kg</span>
                 </div>
-                <div class="mt-0.5 font-mono text-[10px] text-[#4E5969]">
-                  {{ r.thickness }}μm / {{ r.width }}mm
+                <div class="mt-1 flex items-center gap-1 text-[10px] text-[#86909C]">
+                  <span class="rounded-sm bg-[#F0F1F5] px-1 py-0.5">{{ r.rollCount }} 卷</span>
+                  <span class="truncate">{{ r.rollIds.join(', ') }}</span>
                 </div>
-                <div class="mt-0.5 text-[10px] text-[#86909C]">{{ r.machineId }}</div>
               </div>
             </template>
           </draggable>
@@ -307,7 +347,7 @@ function fmtWeekRange() {
                   <draggable
                     v-model="gridMap[m.machineId][d]"
                     group="baking-rolls"
-                    item-key="rollId"
+                    item-key="specKey"
                     ghost-class="opacity-30"
                     class="min-h-[112px]"
                     @change="onCellChange($event, m.machineId, d)"
@@ -324,11 +364,12 @@ function fmtWeekRange() {
                           @click.stop="returnToPool(roll)"
                         >×</button>
 
-                        <div class="pr-5 font-bold text-[#165DFF]">{{ roll.rollId }}</div>
-                        <div class="mt-0.5 font-mono text-[10px] text-[#86909C]">
-                          {{ roll.thickness }}μm / {{ roll.width }}mm
+                        <div class="pr-5 font-bold font-mono text-[#165DFF]">
+                          {{ roll.thickness }}μm/{{ roll.width }}mm
                         </div>
-                        <div class="mt-0.5 font-mono text-[10px] text-[#4E5969]">{{ roll.weightKg }}kg</div>
+                        <div class="mt-0.5 font-mono text-[10px] text-[#4E5969]">
+                          {{ roll.rollCount }} 卷 · {{ roll.totalWeightKg }}kg
+                        </div>
                       </div>
                     </template>
                   </draggable>
@@ -343,23 +384,27 @@ function fmtWeekRange() {
     <!-- ── Detail dialog ── -->
     <el-dialog
       v-model="showDetailDialog"
-      :title="`卷料详情 — ${detailRoll?.rollId}`"
+      :title="`入炉批次详情 — ${detailRoll?.thickness}μm/${detailRoll?.width}mm`"
       width="420px"
       destroy-on-close
     >
       <template v-if="detailRoll">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="卷号" :span="2">
-            <span class="font-bold text-[#165DFF]">{{ detailRoll.rollId }}</span>
+          <el-descriptions-item label="规格" :span="2">
+            <span class="font-bold font-mono text-[#165DFF]">
+              {{ detailRoll.thickness }}μm / {{ detailRoll.width }}mm
+            </span>
           </el-descriptions-item>
-          <el-descriptions-item label="生产系统">{{ detailMachineId }}</el-descriptions-item>
+          <el-descriptions-item label="入炉系统">{{ detailMachineId }}</el-descriptions-item>
           <el-descriptions-item label="计划入炉日">{{ detailDate }}</el-descriptions-item>
-          <!-- <el-descriptions-item label="生产机台">{{ detailRoll.machineId }}</el-descriptions-item> -->
-          <el-descriptions-item label="入库日期">{{ detailRoll.createdAt }}</el-descriptions-item>
-          <el-descriptions-item label="厚度">{{ detailRoll.thickness }} μm</el-descriptions-item>
-          <el-descriptions-item label="宽度">{{ detailRoll.width }} mm</el-descriptions-item>
-          <el-descriptions-item label="重量" :span="2">
-            <span class="font-mono font-semibold text-[#165DFF]">{{ detailRoll.weightKg }} kg</span>
+          <el-descriptions-item label="卷数">{{ detailRoll.rollCount }} 卷</el-descriptions-item>
+          <el-descriptions-item label="总重量">
+            <span class="font-mono font-semibold text-[#165DFF]">{{ detailRoll.totalWeightKg }} kg</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="卷号列表" :span="2">
+            <div class="flex flex-wrap gap-1">
+              <el-tag v-for="id in detailRoll.rollIds" :key="id" effect="light" type="info" size="small">{{ id }}</el-tag>
+            </div>
           </el-descriptions-item>
         </el-descriptions>
       </template>

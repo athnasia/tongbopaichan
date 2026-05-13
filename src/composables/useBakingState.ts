@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 
 export interface BakingSlot {
   slotId: string
-  rollId: string
+  rollIds: string[]
   machineId: string
   date: string
   weightKg: number

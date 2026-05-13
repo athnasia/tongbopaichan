@@ -4,11 +4,9 @@ import { ElMessage } from 'element-plus'
 import RawFoilBucketBoard from '@/components/RawFoilBucketBoard.vue'
 import { useApsStore } from '@/stores/aps'
 import { usePagination } from '@/composables/usePagination'
-import { useRawFoilPlanState } from '@/composables/useRawFoilPlanState'
 import type { AggregatedRawFoilPlan } from '@/types/demo'
 
 const apsStore = useApsStore()
-const { removeSlot } = useRawFoilPlanState()
 
 const visibleDates = ref<string[]>([])
 function onDatesChanged(dates: string[]) { visibleDates.value = dates }

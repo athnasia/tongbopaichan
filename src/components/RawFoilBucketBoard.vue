@@ -4,7 +4,6 @@ import draggable from 'vuedraggable'
 import { useApsStore } from '@/stores/aps'
 import { useConfigStore } from '@/stores/useConfigStore'
 import { useRawFoilPlanState } from '@/composables/useRawFoilPlanState'
-import type { DemandShortageRow } from '@/types/demo'
 
 const apsStore = useApsStore()
 const configStore = useConfigStore()
@@ -52,10 +51,20 @@ const rfMachines = computed(() =>
 )
 
 // ── Extended type for grid/pool ──
-interface GridDemand extends DemandShortageRow {
+interface GridDemand {
+  specKey: string        // '6-600-高'  — also used as item-key
+  productionOrderId: string  // same as specKey in pool/slot entries
+  thickness: number
+  width: number
+  strength: string
+  shortageKg: number
+  urgency: string
+  orderIds: string[]
   _slotId?: string
   _plannedKg?: number
 }
+
+const urgencyRank: Record<string, number> = { '急1': 4, '急2': 3, '常规': 2, '配': 1 }
 
 const unscheduledPool = ref<GridDemand[]>([])
 const gridMap = ref<Record<string, Record<string, GridDemand[]>>>({})
@@ -70,28 +79,55 @@ function buildState() {
     for (const d of datesArr) newGrid[m.machineId][d] = []
   }
 
-  const slottedOrderIds = new Set(Object.values(rawFoilSlots).map((s) => s.productionOrderId))
-
-  // Grid: slot-based entries
+  // Rebuild grid from slot data (slot already carries all spec info)
   for (const [slotId, slot] of Object.entries(rawFoilSlots)) {
-    const demand = apsStore.demandShortages.find((d) => d.productionOrderId === slot.productionOrderId)
-    if (!demand) continue
     if (newGrid[slot.machineId]?.[slot.date] !== undefined) {
       newGrid[slot.machineId][slot.date].push({
-        ...demand,
+        specKey: slot.productionOrderId,
+        productionOrderId: slot.productionOrderId,
+        thickness: slot.thickness,
+        width: slot.width,
+        strength: slot.strength,
+        shortageKg: slot.plannedWeightKg,
+        urgency: '',
+        orderIds: [],
         _slotId: slotId,
         _plannedKg: slot.plannedWeightKg,
       })
     }
   }
 
-  // Pool: demands with shortageKg > 0 not yet slotted
-  const newPool: GridDemand[] = apsStore.demandShortages
-    .filter((d) => d.shortageKg > 0 && !slottedOrderIds.has(d.productionOrderId))
-    .map((d) => ({ ...d }))
+  // Pool: aggregate demandShortages by spec, skip already-slotted specs
+  const slottedSpecKeys = new Set(Object.values(rawFoilSlots).map((s) => s.productionOrderId))
+  const specMap = new Map<string, GridDemand>()
+
+  for (const d of apsStore.demandShortages) {
+    if (d.shortageKg <= 0) continue
+    const specKey = `${d.thickness}-${d.width}-${d.strength}`
+    if (slottedSpecKeys.has(specKey)) continue
+
+    if (!specMap.has(specKey)) {
+      specMap.set(specKey, {
+        specKey,
+        productionOrderId: specKey,
+        thickness: d.thickness,
+        width: d.width,
+        strength: d.strength,
+        shortageKg: 0,
+        urgency: d.urgency,
+        orderIds: [],
+      })
+    }
+    const entry = specMap.get(specKey)!
+    entry.shortageKg += d.shortageKg
+    entry.orderIds.push(d.productionOrderId)
+    if ((urgencyRank[d.urgency] ?? 0) > (urgencyRank[entry.urgency] ?? 0)) {
+      entry.urgency = d.urgency
+    }
+  }
 
   gridMap.value = newGrid
-  unscheduledPool.value = newPool
+  unscheduledPool.value = [...specMap.values()]
 }
 
 watch(
@@ -134,10 +170,10 @@ function onCellChange(evt: any, machineId: string, date: string) {
 function confirmQty() {
   const demand = qtyDemand.value!
   const { machineId, date } = qtyCell.value!
-  const slotId = `${demand.productionOrderId}_${Date.now()}`
+  const slotId = `${demand.specKey}_${Date.now()}`
   rawFoilSlots[slotId] = {
     slotId,
-    productionOrderId: demand.productionOrderId,
+    productionOrderId: demand.specKey,
     machineId,
     date,
     plannedWeightKg: Math.max(1, Math.round(qtyInput.value)),
@@ -245,7 +281,7 @@ function fmtWeekRange() {
           <draggable
             v-model="unscheduledPool"
             group="rawfoil-demands"
-            item-key="productionOrderId"
+            item-key="specKey"
             ghost-class="opacity-30"
             @change="onPoolChange"
           >
@@ -254,14 +290,18 @@ function fmtWeekRange() {
                 class="mb-2 cursor-grab select-none rounded-lg border border-[#E5E6EB] bg-white p-2.5 shadow-sm transition-shadow hover:border-[#A0CFFF] hover:shadow-md active:cursor-grabbing"
               >
                 <div class="flex items-start justify-between gap-1">
-                  <span class="text-[11px] font-bold text-[#165DFF]">{{ d.productionOrderId }}</span>
-                  <span class="shrink-0 font-mono text-[10px] text-[#F53F3F] font-semibold">{{ d.shortageKg }}kg</span>
+                  <span class="font-mono text-[11px] font-bold text-[#165DFF]">
+                    {{ d.thickness }}μm / {{ d.width }}mm / {{ d.strength }}
+                  </span>
+                  <span class="shrink-0 font-mono text-[10px] font-semibold text-[#F53F3F]">{{ d.shortageKg }}kg</span>
                 </div>
-                <div class="mt-0.5 font-mono text-[10px] text-[#4E5969]">
-                  {{ d.thickness }}μm / {{ d.width }}mm / {{ d.strength }}
-                </div>
-                <div class="mt-1 flex items-center gap-1">
+                <div class="mt-1 flex flex-wrap items-center gap-1">
                   <span class="rounded-sm bg-[#FFF3E0] px-1 py-0.5 text-[10px] text-[#FF7D00]">{{ d.urgency }}</span>
+                  <span
+                    v-for="id in d.orderIds"
+                    :key="id"
+                    class="rounded-sm bg-[#E8F3FF] px-1 py-0.5 text-[10px] text-[#165DFF]"
+                  >{{ id }}</span>
                 </div>
               </div>
             </template>
@@ -369,9 +409,8 @@ function fmtWeekRange() {
                           @click.stop="returnToPool(demand)"
                         >×</button>
 
-                        <div class="pr-5 font-bold text-[#165DFF]">{{ demand.productionOrderId }}</div>
-                        <div class="mt-0.5 font-mono text-[10px] text-[#86909C]">
-                          {{ demand.thickness }}μm / {{ demand.width }}mm / {{ demand.strength }}
+                        <div class="pr-5 font-bold text-[#165DFF] font-mono">
+                          {{ demand.thickness }}μm/{{ demand.width }}mm/{{ demand.strength }}
                         </div>
                         <div class="mt-0.5 font-mono text-[10px] text-[#165DFF] font-semibold">
                           {{ demand._plannedKg ?? demand.shortageKg }}kg
@@ -400,15 +439,21 @@ function fmtWeekRange() {
       <template v-if="qtyDemand">
         <div class="mb-4 rounded-lg bg-[#F7F8FA] p-3 text-sm text-[#4E5969]">
           <div class="flex justify-between">
-            <span>生产单号</span>
-            <span class="font-bold text-[#165DFF]">{{ qtyDemand.productionOrderId }}</span>
-          </div>
-          <div class="mt-1 flex justify-between">
             <span>规格</span>
-            <span class="font-mono">{{ qtyDemand.thickness }}μm / {{ qtyDemand.width }}mm / {{ qtyDemand.strength }}</span>
+            <span class="font-bold font-mono text-[#165DFF]">{{ qtyDemand.thickness }}μm / {{ qtyDemand.width }}mm / {{ qtyDemand.strength }}</span>
           </div>
           <div class="mt-1 flex justify-between">
-            <span>缺口量</span>
+            <span>关联订单</span>
+            <div class="flex flex-wrap gap-1 justify-end">
+              <span
+                v-for="id in qtyDemand.orderIds"
+                :key="id"
+                class="rounded-sm bg-[#E8F3FF] px-1 py-0.5 text-[10px] text-[#165DFF]"
+              >{{ id }}</span>
+            </div>
+          </div>
+          <div class="mt-1 flex justify-between">
+            <span>总缺口量</span>
             <span class="font-mono font-semibold text-[#F53F3F]">{{ qtyDemand.shortageKg }} kg</span>
           </div>
           <div class="mt-1 flex justify-between">
@@ -441,27 +486,19 @@ function fmtWeekRange() {
     <!-- ── Detail dialog ── -->
     <el-dialog
       v-model="showDetailDialog"
-      :title="`需求详情 — ${detailDemand?.productionOrderId}`"
+      :title="`需求详情 — ${detailDemand?.thickness}μm/${detailDemand?.width}mm/${detailDemand?.strength}`"
       width="420px"
       destroy-on-close
     >
       <template v-if="detailDemand">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="生产单号" :span="2">
-            <span class="font-bold text-[#165DFF]">{{ detailDemand.productionOrderId }}</span>
+          <el-descriptions-item label="规格" :span="2">
+            <span class="font-bold font-mono text-[#165DFF]">
+              {{ detailDemand.thickness }}μm / {{ detailDemand.width }}mm / {{ detailDemand.strength }}
+            </span>
           </el-descriptions-item>
           <el-descriptions-item label="机台">{{ detailMachineId }}</el-descriptions-item>
           <el-descriptions-item label="计划日期">{{ detailDate }}</el-descriptions-item>
-          <el-descriptions-item label="厚度">{{ detailDemand.thickness }} μm</el-descriptions-item>
-          <el-descriptions-item label="宽度">{{ detailDemand.width }} mm</el-descriptions-item>
-          <el-descriptions-item label="强度">{{ detailDemand.strength }}</el-descriptions-item>
-          <el-descriptions-item label="紧急度">{{ detailDemand.urgency }}</el-descriptions-item>
-          <el-descriptions-item label="目标量">
-            <span class="font-mono">{{ detailDemand.targetWeightKg }} kg</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="缺口量">
-            <span class="font-mono font-semibold text-[#F53F3F]">{{ detailDemand.shortageKg }} kg</span>
-          </el-descriptions-item>
           <el-descriptions-item label="本次计划量" :span="2">
             <span class="font-mono font-semibold text-[#165DFF]">{{ detailDemand._plannedKg ?? detailDemand.shortageKg }} kg</span>
           </el-descriptions-item>
